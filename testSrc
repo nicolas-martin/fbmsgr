@@ -1,0 +1,6 @@
+import fbchat
+import sys
+
+client = fbchat.Client(sys.argv[1], sys.argv[2])
+
+client.listen()

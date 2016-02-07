@@ -21,3 +21,6 @@ develop-eggs
 
 # Sphinx documentation
 docs/_build/
+*.idea
+env-py3/
+env/

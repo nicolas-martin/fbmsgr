@@ -19,21 +19,23 @@ from bs4 import BeautifulSoup as bs
 from .utils import *
 from .models import *
 from .stickers import *
+import pymysql
 
 # URLs
-LoginURL     ="https://m.facebook.com/login.php?login_attempt=1"
-SearchURL    ="https://www.facebook.com/ajax/typeahead/search.php"
-SendURL      ="https://www.facebook.com/ajax/mercury/send_messages.php"
-ThreadsURL   ="https://www.facebook.com/ajax/mercury/threadlist_info.php"
-ThreadSyncURL="https://www.facebook.com/ajax/mercury/thread_sync.php"
-MessagesURL  ="https://www.facebook.com/ajax/mercury/thread_info.php"
-ReadStatusURL="https://www.facebook.com/ajax/mercury/change_read_status.php"
-DeliveredURL ="https://www.facebook.com/ajax/mercury/delivery_receipts.php"
-MarkSeenURL  ="https://www.facebook.com/ajax/mercury/mark_seen.php"
-BaseURL      ="https://www.facebook.com"
-MobileURL    ="https://m.facebook.com/"
-StickyURL    ="https://0-edge-chat.facebook.com/pull"
-PingURL      ="https://0-channel-proxy-06-ash2.facebook.com/active_ping"
+LoginURL = "https://m.facebook.com/login.php?login_attempt=1"
+SearchURL = "https://www.facebook.com/ajax/typeahead/search.php"
+SendURL = "https://www.facebook.com/ajax/mercury/send_messages.php"
+ThreadsURL = "https://www.facebook.com/ajax/mercury/threadlist_info.php"
+ThreadSyncURL = "https://www.facebook.com/ajax/mercury/thread_sync.php"
+MessagesURL = "https://www.facebook.com/ajax/mercury/thread_info.php"
+ReadStatusURL = "https://www.facebook.com/ajax/mercury/change_read_status.php"
+DeliveredURL = "https://www.facebook.com/ajax/mercury/delivery_receipts.php"
+MarkSeenURL = "https://www.facebook.com/ajax/mercury/mark_seen.php"
+BaseURL = "https://www.facebook.com"
+MobileURL = "https://m.facebook.com/"
+StickyURL = "https://0-edge-chat.facebook.com/pull"
+PingURL = "https://0-channel-proxy-06-ash2.facebook.com/active_ping"
+
 
 class Client(object):
     """A client for the Facebook Chat (Messenger).
@@ -54,6 +56,12 @@ class Client(object):
 
         """
 
+        self.connection = pymysql.connect(host='localhost',
+                                          user='root',
+                                          password='password',
+                                          db='mydb',
+                                          charset='utf8mb4',
+                                          cursorclass=pymysql.cursors.DictCursor)
         if not (email and password):
             raise Exception("id and password or config is needed")
 
@@ -63,7 +71,7 @@ class Client(object):
         self._session = requests.session()
         self.req_counter = 1
         self.seq = "0"
-        self.payloadDefault={}
+        self.payloadDefault = {}
         self.client = 'mercury'
         self.listening = False
 
@@ -71,11 +79,11 @@ class Client(object):
             user_agent = choice(USER_AGENTS)
 
         self._header = {
-            'Content-Type' : 'application/x-www-form-urlencoded',
-            'Referer' : BaseURL,
-            'Origin' : BaseURL,
-            'User-Agent' : user_agent,
-            'Connection' : 'keep-alive',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Referer': BaseURL,
+            'Origin': BaseURL,
+            'User-Agent': user_agent,
+            'Connection': 'keep-alive',
         }
 
         self._console("Logging in...")
@@ -98,24 +106,24 @@ class Client(object):
         Adds the following defaults to the payload:
           __rev, __user, __a, ttstamp, fb_dtsg, __req
         '''
-        payload=self.payloadDefault.copy()
+        payload = self.payloadDefault.copy()
         if query:
             payload.update(query)
         payload['__req'] = str_base(self.req_counter, 36)
         payload['seq'] = self.seq
-        self.req_counter+=1
+        self.req_counter += 1
         return payload
 
     def _get(self, url, query=None, timeout=30):
-        payload=self._generatePayload(query)
+        payload = self._generatePayload(query)
         return self._session.get(url, headers=self._header, params=payload, timeout=timeout)
 
     def _post(self, url, query=None, timeout=30):
-        payload=self._generatePayload(query)
+        payload = self._generatePayload(query)
         return self._session.post(url, headers=self._header, data=payload, timeout=timeout)
 
     def _cleanPost(self, url, query=None, timeout=30):
-        self.req_counter+=1
+        self.req_counter += 1
         return self._session.post(url, headers=self._header, data=query, timeout=timeout)
 
     def login(self):
@@ -123,7 +131,8 @@ class Client(object):
             raise Exception("id and password or config is needed")
 
         soup = bs(self._get(MobileURL).text, "lxml")
-        data = dict((elem['name'], elem['value']) for elem in soup.findAll("input") if elem.has_attr('value') and elem.has_attr('name'))
+        data = dict((elem['name'], elem['value']) for elem in soup.findAll("input") if
+                    elem.has_attr('value') and elem.has_attr('name'))
         data['email'] = self.email
         data['pass'] = self.password
         data['login'] = 'Log In'
@@ -131,7 +140,7 @@ class Client(object):
         r = self._cleanPost(LoginURL, data)
 
         if 'home' in r.url:
-            self.client_id = hex(int(random()*2147483648))[2:]
+            self.client_id = hex(int(random() * 2147483648))[2:]
             self.start_time = now()
             self.uid = int(self._session.cookies['c_user'])
             self.user_channel = "p_" + str(self.uid)
@@ -139,25 +148,25 @@ class Client(object):
 
             r = self._get(BaseURL)
             soup = bs(r.text, "lxml")
-            self.fb_dtsg = soup.find("input", {'name':'fb_dtsg'})['value']
+            self.fb_dtsg = soup.find("input", {'name': 'fb_dtsg'})['value']
             self._setttstamp()
             # Set default payload
-            self.payloadDefault['__rev']= int(r.text.split('"revision":',1)[1].split(",",1)[0])
-            self.payloadDefault['__user']= self.uid
-            self.payloadDefault['__a']= '1'
-            self.payloadDefault['ttstamp']= self.ttstamp
-            self.payloadDefault['fb_dtsg']= self.fb_dtsg
+            self.payloadDefault['__rev'] = int(r.text.split('"revision":', 1)[1].split(",", 1)[0])
+            self.payloadDefault['__user'] = self.uid
+            self.payloadDefault['__a'] = '1'
+            self.payloadDefault['ttstamp'] = self.ttstamp
+            self.payloadDefault['fb_dtsg'] = self.fb_dtsg
 
             self.form = {
-                'channel' : self.user_channel,
-                'partition' : '-2',
-                'clientid' : self.client_id,
-                'viewer_uid' : self.uid,
-                'uid' : self.uid,
-                'state' : 'active',
-                'format' : 'json',
-                'idle' : 0,
-                'cap' : '8'
+                'channel': self.user_channel,
+                'partition': '-2',
+                'clientid': self.client_id,
+                'viewer_uid': self.uid,
+                'uid': self.uid,
+                'state': 'active',
+                'format': 'json',
+                'idle': 0,
+                'cap': '8'
             }
 
             self.prev = now()
@@ -177,22 +186,22 @@ class Client(object):
         :param name: name of a person
         """
         payload = {
-            'value' : name.lower(),
-            'viewer' : self.uid,
-            'rsp' : "search",
-            'context' : "search",
-            'path' : "/home.php",
-            'request_id' : str(uuid1()),
+            'value': name.lower(),
+            'viewer': self.uid,
+            'rsp': "search",
+            'context': "search",
+            'path': "/home.php",
+            'request_id': str(uuid1()),
         }
 
         r = self._get(SearchURL, payload)
         self.j = j = get_json(r.text)
-		
+
         users = []
         for entry in j['payload']['entries']:
             if entry['type'] == 'user':
                 users.append(User(entry))
-        return users # have bug TypeError: __repr__ returned non-string (type bytes)
+        return users  # have bug TypeError: __repr__ returned non-string (type bytes)
 
     def send(self, thread_id, message=None, like=None):
         """Send a message with given thread id
@@ -205,30 +214,30 @@ class Client(object):
         timestamp = now()
         date = datetime.now()
         data = {
-            'client' : self.client,
-            'message_batch[0][action_type]' : 'ma-type:user-generated-message',
-            'message_batch[0][author]' : 'fbid:' + str(self.uid),
-            'message_batch[0][specific_to_list][0]' : 'fbid:' + str(thread_id),
-            'message_batch[0][specific_to_list][1]' : 'fbid:' + str(self.uid),
-            'message_batch[0][timestamp]' : timestamp,
-            'message_batch[0][timestamp_absolute]' : 'Today',
-            'message_batch[0][timestamp_relative]' : str(date.hour) + ":" + str(date.minute).zfill(2),
-            'message_batch[0][timestamp_time_passed]' : '0',
-            'message_batch[0][is_unread]' : False,
-            'message_batch[0][is_cleared]' : False,
-            'message_batch[0][is_forward]' : False,
-            'message_batch[0][is_filtered_content]' : False,
-            'message_batch[0][is_spoof_warning]' : False,
-            'message_batch[0][source]' : 'source:chat:web',
-            'message_batch[0][source_tags][0]' : 'source:chat',
-            'message_batch[0][body]' : message,
-            'message_batch[0][html_body]' : False,
-            'message_batch[0][ui_push_phase]' : 'V3',
-            'message_batch[0][status]' : '0',
-            'message_batch[0][message_id]' : generateMessageID(self.client_id),
-            'message_batch[0][manual_retry_cnt]' : '0',
-            'message_batch[0][thread_fbid]' : thread_id,
-            'message_batch[0][has_attachment]' : False
+            'client': self.client,
+            'message_batch[0][action_type]': 'ma-type:user-generated-message',
+            'message_batch[0][author]': 'fbid:' + str(self.uid),
+            'message_batch[0][specific_to_list][0]': 'fbid:' + str(thread_id),
+            'message_batch[0][specific_to_list][1]': 'fbid:' + str(self.uid),
+            'message_batch[0][timestamp]': timestamp,
+            'message_batch[0][timestamp_absolute]': 'Today',
+            'message_batch[0][timestamp_relative]': str(date.hour) + ":" + str(date.minute).zfill(2),
+            'message_batch[0][timestamp_time_passed]': '0',
+            'message_batch[0][is_unread]': False,
+            'message_batch[0][is_cleared]': False,
+            'message_batch[0][is_forward]': False,
+            'message_batch[0][is_filtered_content]': False,
+            'message_batch[0][is_spoof_warning]': False,
+            'message_batch[0][source]': 'source:chat:web',
+            'message_batch[0][source_tags][0]': 'source:chat',
+            'message_batch[0][body]': message,
+            'message_batch[0][html_body]': False,
+            'message_batch[0][ui_push_phase]': 'V3',
+            'message_batch[0][status]': '0',
+            'message_batch[0][message_id]': generateMessageID(self.client_id),
+            'message_batch[0][manual_retry_cnt]': '0',
+            'message_batch[0][thread_fbid]': thread_id,
+            'message_batch[0][has_attachment]': False
         }
         if like:
             try:
@@ -237,6 +246,7 @@ class Client(object):
                 # if user doesn't enter l or m or s, then use the large one
                 sticker = LIKES['l']
             data["message_batch[0][sticker_id]"] = sticker
+
         r = self._post(SendURL, data)
         return r.ok
 
@@ -248,12 +258,12 @@ class Client(object):
         :param end: (optional) the last index of a thread
         """
         if not end: end = start + 20
-        if end <= start: end=start+end
+        if end <= start: end = start + end
 
-        data={}
-        data['messages[user_ids][%s][offset]'%userID]=    start
-        data['messages[user_ids][%s][limit]'%userID]=     end
-        data['messages[user_ids][%s][timestamp]'%userID]= now()
+        data = {}
+        data['messages[user_ids][%s][offset]' % userID] = start
+        data['messages[user_ids][%s][limit]' % userID] = end
+        data['messages[user_ids][%s][timestamp]' % userID] = now()
 
         r = self._post(MessagesURL, query=data)
         if not r.ok or len(r.text) == 0:
@@ -262,27 +272,24 @@ class Client(object):
         j = get_json(r.text)
         if not j['payload']:
             return None
-        messages=[]
+        messages = []
         for message in j['payload']['actions']:
             messages.append(Message(**message))
         return list(reversed(messages))
-
 
     def getThreadList(self, start, end=None):
         """Get thread list of your facebook account.
 
         :param start: the start index of a thread
-        :param end: (optional) the last index of a thread
+        :param end: (optional)≤ the last index of a thread
         """
         if not end: end = start + 20
-        if end <= start: end=start+end
+        if end <= start: end = start + end
 
-        timestamp = now()
-        date = datetime.now()
         data = {
-            'client' : self.client,
-            'inbox[offset]' : start,
-            'inbox[limit]' : end,
+            'client': self.client,
+            'inbox[offset]': start,
+            'inbox[limit]': end,
         }
 
         r = self._post(ThreadsURL, data)
@@ -292,15 +299,15 @@ class Client(object):
         j = get_json(r.text)
 
         # Get names for people
-        participants={}
+        participants = {}
         try:
             for participant in j['payload']['participants']:
                 participants[participant["fbid"]] = participant["name"]
         except Exception as e:
-          print(j)
+            print(j)
 
         # Prevent duplicates in self.threads
-        threadIDs=[getattr(x, "thread_id") for x in self.threads]
+        threadIDs = [getattr(x, "thread_id") for x in self.threads]
         for thread in j['payload']['threads']:
             if thread["thread_id"] not in threadIDs:
                 try:
@@ -312,13 +319,12 @@ class Client(object):
 
         return self.threads
 
-
     def getUnread(self):
         form = {
             'client': 'mercury_sync',
             'folders[0]': 'inbox',
-            'last_action_timestamp': now() - 60*1000
-            #'last_action_timestamp': 0
+            'last_action_timestamp': now() - 60 * 1000
+            # 'last_action_timestamp': 0
         }
         r = self._post(ThreadSyncURL, form)
         if not r.ok or len(r.text) == 0:
@@ -331,16 +337,12 @@ class Client(object):
         return result
 
     def markAsDelivered(self, userID, threadID):
-        data={"message_ids[0]": threadID}
-        data["thread_ids[%s][0]"%userID] = threadID
+        data = {"message_ids[0]": threadID, "thread_ids[%s][0]" % userID: threadID}
         r = self._post(DeliveredURL, data)
         return r.ok
 
     def markAsRead(self, userID):
-        data={
-            "watermarkTimestamp": now(),
-            "shouldSendReadReceipt": True}
-        data["ids[%s]"%userID] = True
+        data = {"watermarkTimestamp": now(), "shouldSendReadReceipt": True, "ids[%s]" % userID: True}
         r = self._post(ReadStatusURL, data)
         return r.ok
 
@@ -348,9 +350,8 @@ class Client(object):
         r = self._post(MarkSeenURL, {"seen_timestamp": 0})
         return r.ok
 
-
     def ping(self, sticky):
-        data={
+        data = {
             'channel': self.user_channel,
             'clientid': self.client_id,
             'partition': -2,
@@ -362,13 +363,12 @@ class Client(object):
         r = self._get(PingURL, data)
         return r.ok
 
-
     def _getSticky(self):
-        '''
+        """
         Call pull api to get sticky and pool parameter,
         newer api needs these parameter to work.
-        '''
-        data={ "msgs_recv": 0 }
+        """
+        data = {"msgs_recv": 0}
 
         r = self._get(StickyURL, data)
         j = get_json(r.text)
@@ -380,15 +380,14 @@ class Client(object):
         pool = j['lb_info']['pool']
         return sticky, pool
 
-
     def _pullMessage(self, sticky, pool):
-        '''
+        """
         Call pull api with seq value to get message data.
-        '''
-        data={
+        """
+        data = {
             "msgs_recv": 0,
-            "sticky_token":sticky,
-            "sticky_pool":pool
+            "sticky_token": sticky,
+            "sticky_pool": pool
         }
 
         r = self._get(StickyURL, data)
@@ -397,45 +396,44 @@ class Client(object):
         self.seq = j.get('seq', '0')
         return j
 
-
     def _parseMessage(self, content):
-        '''
+        """
         Get message and author name from content.
         May contains multiple messages in the content.
-        '''
+        """
         if 'ms' not in content:
             return
         for m in content['ms']:
-            try:
-                if m['type'] in ['m_messaging', 'messaging']:
-                    if m['event'] in ['deliver']:
-                        mid =   m['message']['mid']
-                        message=m['message']['body']
-                        fbid =  m['message']['sender_fbid']
-                        name =  m['message']['sender_name']
-                        self.on_message(mid, fbid, name, message, m)
-                elif m['type'] in ['typ']:
-                    self.on_typing(m["from"])
-                elif m['type'] in ['m_read_receipt']:
-                    self.on_read(m['realtime_viewer_fbid'], m['reader'], m['time'])
-                elif m['type'] in ['inbox']:
-                    viewer = m['realtime_viewer_fbid']
-                    unseen = m['unseen']
-                    unread = m['unread']
-                    other_unseen = m['other_unseen']
-                    other_unread = m['other_unread']
-                    timestamp = m['seen_timestamp']
-                    self.on_inbox(viewer, unseen, unread, other_unseen, other_unread, timestamp)
-                elif m['type'] in ['qprimer']:
-                    self.on_qprimer(m['made'])
-                else:
-                    print(m)
-            except Exception as e:
-                self.on_message_error(e, m)
+            if m['type'] in ['m_messaging', 'messaging']:
+                try:
+                    thread_id = m['message']['mid']
+                    message = m['message']['body']
+                    fbid = m['message']['sender_fbid']
+                    name = m['message']['sender_name']
+                    self.on_message(thread_id, fbid, name, message, m)
+                except:
+                    pass
+            elif m['type'] in ['typ']:
+                try:
+                    fbid = m["from"]
+                    self.on_typing(fbid)
+                except:
+                    pass
+            elif m['type'] in ['m_read_receipt']:
+                try:
+                    author = m['author']
+                    reader = m['reader']
+                    time = m['time']
+                    self.on_read(author, reader, time)
+                except:
+                    pass
+            else:
+                print("Unknown content type received", m['type'])
 
     def listen(self, markAlive=True):
         self.listening = True
         sticky, pool = self._getSticky()
+        # Connect to the database
 
         if self.debug:
             print("Listening...")
@@ -445,31 +443,50 @@ class Client(object):
                 if markAlive: self.ping(sticky)
                 try:
                     content = self._pullMessage(sticky, pool)
-                    if content: self._parseMessage(content)
+                    self._parseMessage(content)
+                    self.send_outbox()
                 except requests.exceptions.RequestException as e:
                     continue
             except KeyboardInterrupt:
                 break
             except requests.exceptions.Timeout:
-              pass
+                pass
 
-    def on_message(self, mid, author_id, author_name, message, metadata):
-        self.markAsDelivered(author_id, mid)
+        self.connection.close()
+
+    def on_message(self, thread_id, author_id, author_name, message, metadata):
+        self.markAsDelivered(author_id, thread_id)
         self.markAsRead(author_id)
-        print("%s said: %s"%(author_name, message))
+        print("%s said: %s. author_id = %s, thread_id = %s" % (author_name, message, author_id, thread_id))
+        with self.connection.cursor() as cursor:
+            # Create a new record
+            sql = "INSERT INTO `inbox` (`author_id`, `thread_id`, `author_name`, `message`) VALUES (%s, %s, %s, %s)"
+            cursor.execute(sql, (author_id, thread_id, author_name, message))
+
+        self.connection.commit()
+
+    def send_outbox(self):
+        with self.connection.cursor() as cursor:
+            # Read a single record
+            sql = "SELECT `id`, `author_id`, `thread_id`, `author_name`, `message` FROM `outbox` WHERE `isSent`=0"
+            cursor.execute(sql)
+            result = cursor.fetchall()
+            for row in result:
+                author_id = row["author_id"]
+                thread_id = row["thread_id"]
+                author_name = row["author_name"]
+                message = row["message"]
+                outbox_id = row["id"]
+                self.send(author_id, message)
+                print("send message %s to %s thread_id = %s" % (message, author_name, author_id))
+
+                # toggle isSent
+                toggle_is_sent = "update outbox set isSent = 1 where id = %s;"
+                cursor.execute(toggle_is_sent, outbox_id)
+                self.connection.commit()
 
     def on_typing(self, author_id):
         pass
 
     def on_read(self, author, reader, time):
-        pass
-
-    def on_inbox(self, viewer, unseen, unread, other_unseen, other_unread, timestamp):
-        pass
-
-    def on_message_error(self, exception, message):
-        print("Exception: ")
-        print(exception)
-
-    def on_qprimer(self, timestamp):
         pass
